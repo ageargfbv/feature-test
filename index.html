@@ -53,6 +53,11 @@ const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const has=(o,k)=>{try{return k in o}catch(e){return false}};
 const errMsg=e=>(e&&(e.name?e.name+': ':'')+(e.message||''))||String(e);
+// https は画面ごと移る（ユニバーサルリンク）。独自のリンクは見えない枠に入れて、アプリの画面が壊れないようにする
+function launch(url){
+  if(/^https?:/i.test(url)){location.href=url;return}
+  const f=document.createElement('iframe');f.style.display='none';f.src=url;document.body.append(f);setTimeout(()=>f.remove(),3000);
+}
 
 const T=[
  {n:'位置情報',has:()=>!!navigator.geolocation,run:()=>new Promise((ok,ng)=>navigator.geolocation.getCurrentPosition(
@@ -106,6 +111,19 @@ const T=[
  {n:'指紋・顔認証（パスキー）',has:()=>!!window.PublicKeyCredential,run:async()=>{
    const a=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();return a?'この端末の生体認証が使えます':'使えません'}},
  {n:'ネットの状態',has:()=>true,run:async()=>{const c=navigator.connection;return (navigator.onLine?'オンライン':'オフライン')+(c?'\n種類 '+(c.effectiveType||'?')+' / 下り '+(c.downlink||'?')+'Mbps':'\n（回線の種類は取れません）')}},
+ ...[
+  ['マップ（近くのスーパーを検索）','https://maps.apple.com/?q=スーパー'],
+  ['マップ（経路案内・西宮駅へ）','https://maps.apple.com/?daddr=34.7373,135.3416&dirflg=d'],
+  ['Googleマップ','comgooglemaps://?q=スーパー'],
+  ['ショートカット（アプリを開く）','shortcuts://'],
+  ['LINE（送る相手の選択）','line://msg/text/'+encodeURIComponent('機能ためしのテスト')],
+  ['リマインダー','x-apple-reminderkit://'],
+  ['メッセージ（作成画面・送信はされません）','sms:'],
+  ['YouTube','youtube://'],
+ ].map(([n,url])=>({n:'アプリ起動：'+n,has:()=>true,run:async()=>{
+   let hid=false;const f=()=>{if(document.hidden)hid=true};document.addEventListener('visibilitychange',f);addEventListener('pagehide',f);
+   launch(url);await sleep(2500);document.removeEventListener('visibilitychange',f);removeEventListener('pagehide',f);
+   return hid?'別のアプリに切り替わりました（戻ってきて確認）':'画面は切り替わりませんでした（アプリが無い、または開けません）'}})),
  {n:'連絡先の選択',has:()=>'contacts' in navigator&&'ContactsManager' in window},
  {n:'ファイルの保存先を選ぶ',has:()=>'showSaveFilePicker' in window},
  {n:'Bluetooth',has:()=>'bluetooth' in navigator},
