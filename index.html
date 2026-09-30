@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>機能ためし</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#6b46c1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="機能ためし">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+:root{--bg:#f6f7f5;--card:#fff;--fg:#1c1f1d;--sub:#6b726d;--acc:#6b46c1;--good:#2f855a;--bad:#c53030;--warn:#b7791f;--line:#e2e5e1}
+@media (prefers-color-scheme:dark){:root{--bg:#141614;--card:#1f221f;--fg:#eceeeb;--sub:#9aa19c;--acc:#9f7aea;--good:#48bb78;--bad:#fc8181;--warn:#ecc94b;--line:#2e332e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;padding:env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 24px)}
+main{max-width:520px;margin:0 auto}
+.apps{display:flex;gap:6px;margin:12px 0 4px}
+.apps a{flex:1;text-align:center;padding:8px 4px;border-radius:10px;border:1px solid var(--line);color:var(--sub);text-decoration:none;font-size:13px;background:var(--card)}
+.apps a.cur{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+h1{font-size:20px;margin:16px 0 4px}
+.sum{color:var(--sub);font-size:14px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.head{display:flex;align-items:center;gap:8px}
+.head b{flex:1;font-size:15.5px}
+.badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.ok{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.ng{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.wait{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.out{font-size:13.5px;color:var(--sub);margin-top:6px;white-space:pre-line;word-break:break-all}
+button{font:inherit;border:0;border-radius:10px;padding:8px 14px;background:var(--acc);color:#fff}
+video{width:100%;max-height:220px;border-radius:8px;margin-top:8px;background:#000}
+.env div{font-size:13.5px;color:var(--sub);word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+<nav class="apps">
+  <a href="https://ageargfbv.github.io/shopping-memo/">買い物メモ</a>
+  <a href="https://ageargfbv.github.io/price-compare/">最安くらべ</a>
+  <a class="cur" href="https://ageargfbv.github.io/feature-test/">機能ためし</a>
+</nav>
+<h1>機能ためし</h1>
+<div class="sum" id="sum"></div>
+<div class="card env" id="env"></div>
+<div id="list"></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const has=(o,k)=>{try{return k in o}catch(e){return false}};
+const errMsg=e=>(e&&(e.name?e.name+': ':'')+(e.message||''))||String(e);
+
+const T=[
+ {n:'位置情報',has:()=>!!navigator.geolocation,run:()=>new Promise((ok,ng)=>navigator.geolocation.getCurrentPosition(
+   p=>ok('緯度 '+p.coords.latitude.toFixed(4)+' / 経度 '+p.coords.longitude.toFixed(4)+'\n誤差 '+Math.round(p.coords.accuracy)+'m'),ng,{timeout:10000}))},
+ {n:'カメラ（映像）',has:()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia),run:async(c)=>{
+   const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+   const v=document.createElement('video');v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=s;c.append(v);
+   await new Promise(r=>v.onloadedmetadata=r);await sleep(2500);
+   const t=s.getVideoTracks()[0],w=v.videoWidth,h=v.videoHeight;s.getTracks().forEach(x=>x.stop());v.remove();
+   return '映像 '+w+'×'+h+'（'+(t.label||'カメラ')+'）'}},
+ {n:'マイク',has:()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia),run:async()=>{
+   const s=await navigator.mediaDevices.getUserMedia({audio:true});
+   const AC=window.AudioContext||window.webkitAudioContext,ac=new AC(),src=ac.createMediaStreamSource(s),an=ac.createAnalyser();
+   src.connect(an);const d=new Uint8Array(an.fftSize);let mx=0;const t0=Date.now();
+   while(Date.now()-t0<3000){an.getByteTimeDomainData(d);for(const x of d)mx=Math.max(mx,Math.abs(x-128));await sleep(50)}
+   s.getTracks().forEach(x=>x.stop());ac.close();
+   return '3秒間で最大の音量 '+mx+'/128\n（声を出すと大きくなります）'}},
+ {n:'音声認識（話した言葉を文字に）',has:()=>!!(window.SpeechRecognition||window.webkitSpeechRecognition),run:()=>new Promise((ok,ng)=>{
+   const SR=window.SpeechRecognition||window.webkitSpeechRecognition,r=new SR();r.lang='ja-JP';let got='';
+   r.onresult=e=>{got=e.results[0][0].transcript};r.onerror=e=>ng(new Error(e.error));
+   r.onend=()=>ok(got?'聞き取り: 「'+got+'」':'何も聞き取れませんでした');r.start();setTimeout(()=>{try{r.stop()}catch(e){}},7000)})},
+ {n:'読み上げ（文字を音声に）',has:()=>'speechSynthesis' in window,run:async()=>{
+   const u=new SpeechSynthesisUtterance('こんにちは。機能ためしです。');u.lang='ja-JP';speechSynthesis.speak(u);
+   await sleep(200);return '再生を指示しました（音が出たか耳で確認）\n日本語の声: '+speechSynthesis.getVoices().filter(v=>/ja/i.test(v.lang)).length+'種'}},
+ {n:'共有シート',has:()=>!!navigator.share,run:async()=>{await navigator.share({title:'機能ためし',text:'テスト',url:location.href});return '共有シートが開きました'}},
+ {n:'ファイルの共有',has:()=>!!(navigator.canShare),run:async()=>{
+   const ok=navigator.canShare({files:[new File(['a'],'a.txt',{type:'text/plain'})]});return ok?'ファイルを共有できます':'ファイルの共有は不可'}},
+ {n:'クリップボード',has:()=>!!(navigator.clipboard),run:async()=>{
+   await navigator.clipboard.writeText('機能ためし');let r='書き込み: 成功';
+   try{const t=await navigator.clipboard.readText();r+='\n読み取り: 成功（'+t.slice(0,20)+'）'}catch(e){r+='\n読み取り: 失敗（'+errMsg(e)+'）'}return r}},
+ {n:'通知',has:()=>'Notification' in window,run:async()=>{
+   const p=await Notification.requestPermission();if(p!=='granted')return '許可: '+p;
+   const reg=await navigator.serviceWorker.getRegistration();if(!reg)throw new Error('Service Worker がありません');
+   await reg.showNotification('機能ためし',{body:'通知のテストです'});return '許可: granted\n通知を出しました（画面上部を確認）'}},
+ {n:'アイコンのバッジ',has:()=>!!navigator.setAppBadge,run:async()=>{await navigator.setAppBadge(3);await sleep(3000);await navigator.clearAppBadge();return 'バッジ「3」を3秒出しました'}},
+ {n:'画面をつけたままにする',has:()=>!!(navigator.wakeLock),run:async()=>{const l=await navigator.wakeLock.request('screen');await sleep(3000);await l.release();return '取得して解放できました'}},
+ {n:'モーションセンサー',has:()=>'DeviceMotionEvent' in window,run:async()=>{
+   if(DeviceMotionEvent.requestPermission){const p=await DeviceMotionEvent.requestPermission();if(p!=='granted')return '許可: '+p}
+   let last=null;const f=e=>{last=e.accelerationIncludingGravity};addEventListener('devicemotion',f);await sleep(2500);removeEventListener('devicemotion',f);
+   return last&&last.x!=null?'加速度 x='+last.x.toFixed(2)+' y='+last.y.toFixed(2)+' z='+last.z.toFixed(2):'値が来ませんでした'}},
+ {n:'向き・コンパス',has:()=>'DeviceOrientationEvent' in window,run:async()=>{
+   if(DeviceOrientationEvent.requestPermission){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return '許可: '+p}
+   let last=null;const f=e=>{last=e};addEventListener('deviceorientation',f);await sleep(2500);removeEventListener('deviceorientation',f);
+   return last&&last.beta!=null?'傾き β='+last.beta.toFixed(0)+' γ='+last.gamma.toFixed(0)+(last.webkitCompassHeading!=null?'\n方角 '+Math.round(last.webkitCompassHeading)+'°':''):'値が来ませんでした'}},
+ {n:'振動',has:()=>!!navigator.vibrate,run:async()=>{const r=navigator.vibrate(200);return r?'振動を指示しました（震えたか確認）':'振動できません'}},
+ {n:'バーコード読み取り（標準機能）',has:()=>'BarcodeDetector' in window,run:async()=>'対応形式: '+(await BarcodeDetector.getSupportedFormats()).join('、')},
+ {n:'全画面',has:()=>!!document.documentElement.requestFullscreen,run:async()=>{await document.documentElement.requestFullscreen();await sleep(1500);await document.exitFullscreen();return '入って戻れました'}},
+ {n:'保存できる容量',has:()=>!!(navigator.storage&&navigator.storage.estimate),run:async()=>{
+   const e=await navigator.storage.estimate(),p=navigator.storage.persist?await navigator.storage.persist():null;
+   return '使用 '+(e.usage/1048576).toFixed(1)+'MB / 上限の目安 '+(e.quota/1048576).toFixed(0)+'MB\n消されにくい保存: '+(p===null?'不明':p?'許可された':'許可されない')}},
+ {n:'指紋・顔認証（パスキー）',has:()=>!!window.PublicKeyCredential,run:async()=>{
+   const a=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();return a?'この端末の生体認証が使えます':'使えません'}},
+ {n:'ネットの状態',has:()=>true,run:async()=>{const c=navigator.connection;return (navigator.onLine?'オンライン':'オフライン')+(c?'\n種類 '+(c.effectiveType||'?')+' / 下り '+(c.downlink||'?')+'Mbps':'\n（回線の種類は取れません）')}},
+ {n:'連絡先の選択',has:()=>'contacts' in navigator&&'ContactsManager' in window},
+ {n:'ファイルの保存先を選ぶ',has:()=>'showSaveFilePicker' in window},
+ {n:'Bluetooth',has:()=>'bluetooth' in navigator},
+ {n:'NFC',has:()=>'NDEFReader' in window},
+ {n:'USB',has:()=>'usb' in navigator},
+ {n:'バックグラウンドの同期',has:()=>'serviceWorker' in navigator&&'SyncManager' in window},
+];
+
+function badge(el,cls,txt){el.className='badge '+cls;el.textContent=txt}
+function render(){
+  const box=$('list');let yes=0;
+  T.forEach(t=>{
+    let h=false;try{h=!!t.has()}catch(e){}
+    if(h)yes++;
+    const c=document.createElement('div');c.className='card';
+    const hd=document.createElement('div');hd.className='head';
+    const b=document.createElement('b');b.textContent=t.n;
+    const bd=document.createElement('span');badge(bd,h?'ok':'ng',h?'対応':'非対応');
+    hd.append(b,bd);
+    const out=document.createElement('div');out.className='out';out.hidden=true;
+    if(h&&t.run){
+      const btn=document.createElement('button');btn.textContent='試す';
+      btn.onclick=async()=>{
+        btn.disabled=true;badge(bd,'wait','実行中');out.hidden=false;out.textContent='';
+        try{const r=await t.run(c);badge(bd,'ok','動いた');out.textContent=r||''}
+        catch(e){badge(bd,'ng','失敗');out.textContent=errMsg(e)}
+        btn.disabled=false;
+      };
+      hd.append(btn);
+    }
+    c.append(hd,out);box.append(c);
+  });
+  $('sum').textContent=T.length+'項目のうち '+yes+'項目が対応（「動いた」は「試す」で確かめます）';
+}
+function env(){
+  const sa=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+  const rows=[
+   'ホーム画面のアプリとして起動: '+(sa?'はい':'いいえ（Safariで開いています）'),
+   '画面: '+screen.width+'×'+screen.height+' / 倍率 '+devicePixelRatio,
+   '表示モード: '+(matchMedia('(prefers-color-scheme:dark)').matches?'ダーク':'ライト'),
+   '言語: '+navigator.language,
+   '端末: '+navigator.userAgent.replace(/^Mozilla\/5.0 /,'')
+  ];
+  rows.forEach(r=>{const d=document.createElement('div');d.textContent=r;$('env').append(d)});
+}
+env();render();
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));
+</script>
+</body>
+</html>
